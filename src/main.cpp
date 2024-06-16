@@ -65,7 +65,7 @@ class VulkanTriangleApp{
         void initVulkan(){
             createInstance();
             setupDebugMessenger();
-            // createSurface();
+            createSurface();
             pickPhysicalDevice();
             createLogicalDevice();
         }
