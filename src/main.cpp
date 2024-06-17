@@ -43,6 +43,10 @@ class VulkanTriangleApp{
         VkQueue presentQueue;
         VkSurfaceKHR surface;
 
+        const std::vector<const char*> deviceExtensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
         struct QueueFamilyIndices {
             std::optional<uint32_t> graphicsFamily;
             std::optional<uint32_t> presentFamily;
@@ -267,17 +271,36 @@ class VulkanTriangleApp{
         }
 
         bool isDeviceSuitable(VkPhysicalDevice device) {
-            VkPhysicalDeviceProperties deviceProperties;
-            VkPhysicalDeviceFeatures deviceFeatures;
+            // VkPhysicalDeviceProperties deviceProperties;
+            // VkPhysicalDeviceFeatures deviceFeatures;
 
-            vkGetPhysicalDeviceProperties(device, &deviceProperties);
-            vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+            // vkGetPhysicalDeviceProperties(device, &deviceProperties);
+            // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
+
+            // return  deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+            //         deviceFeatures.geometryShader && 
             QueueFamilyIndices indices = findQueueFamilies(device);
 
-            return  deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-                    deviceFeatures.geometryShader && 
-                    indices.isComplete();
+            bool extensionsSupported = checkDeviceExtensionSupport(device);
+
+            return indices.isComplete() && extensionsSupported;
+        }
+
+        bool checkDeviceExtensionSupport(VkPhysicalDevice device){ 
+            uint32_t extensionCount;
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+            std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+            std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+            for (const auto& extension: availableExtensions) {
+                requiredExtensions.erase(extension.extensionName);
+            }
+
+            return requiredExtensions.empty();
         }
 
         QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
