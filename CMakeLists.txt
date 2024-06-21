@@ -47,12 +47,14 @@ endif()
 
 # Compile shaders to SPIR-V
 file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/shaders)
+# file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)      // uncomment to compile shaders to build/shaders
 
 file(GLOB SHADERS "shaders/*.vert" "shaders/*.frag")
 
 foreach(SHADER ${SHADERS})
     get_filename_component(FILENAME ${SHADER} NAME)
     set(SPV "${CMAKE_SOURCE_DIR}/shaders/${FILENAME}.spv")
+    # set(SPV "${CMAKE_BINARY_DIR}/shaders/${FILENAME}.spv")    // uncomment to compile shaders to build/shaders
     add_custom_command(
         OUTPUT ${SPV}
         COMMAND glslc ${SHADER} -o ${SPV}
