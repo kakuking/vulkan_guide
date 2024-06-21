@@ -62,6 +62,8 @@ class VulkanTriangleApp{
         VkPipelineLayout pipelineLayout;
         VkPipeline graphicsPipeline;
 
+        std::vector<VkFramebuffer> swapChainFrameBuffers;
+
 
         const std::vector<const char*> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -83,14 +85,6 @@ class VulkanTriangleApp{
             std::vector<VkPresentModeKHR> presentModes;
         };
 
-        void initWindow(){
-            glfwInit();
-
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-            window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-        }
 
         void initVulkan(){
             createInstance();
@@ -102,6 +96,16 @@ class VulkanTriangleApp{
             createImageViews();
             createRenderPass();
             createGraphicsPipeline();
+            createFrameBuffer();
+        }
+
+        void initWindow(){
+            glfwInit();
+
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+            window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         }
 
         void createSurface(){
@@ -744,6 +748,29 @@ class VulkanTriangleApp{
             }
         }
 
+        void createFrameBuffer(){
+            swapChainFrameBuffers.resize(swapChainImageViews.size());
+
+            for(size_t i = 0; i < swapChainImageViews.size(); i++){
+                VkImageView attachments[] = {
+                    swapChainImageViews[i]
+                };
+
+                VkFramebufferCreateInfo frameBufferInfo{};
+                frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                frameBufferInfo.renderPass = renderPass;
+                frameBufferInfo.attachmentCount = 1;
+                frameBufferInfo.pAttachments = attachments;
+                frameBufferInfo.width = swapChainExtent.width;
+                frameBufferInfo.height = swapChainExtent.height;
+                frameBufferInfo.layers = 1;
+
+                if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to create framebuffer!");
+                }
+            }
+        }
+
         void mainLoop(){
             while(!glfwWindowShouldClose(window)) {
                 glfwPollEvents();
@@ -751,6 +778,9 @@ class VulkanTriangleApp{
         }
 
         void cleanup(){
+            for(auto frameBuffer: swapChainFrameBuffers){
+                vkDestroyFramebuffer(device, frameBuffer, nullptr);
+            }
             vkDestroyPipeline(device, graphicsPipeline, nullptr);
             vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
             vkDestroyRenderPass(device, renderPass, nullptr);
