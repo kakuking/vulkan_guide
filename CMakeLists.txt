@@ -21,6 +21,7 @@ add_executable(VulkanTrial ${SOURCES})
 # Find Vulkan package
 find_package(Vulkan REQUIRED)
 if (Vulkan_FOUND)
+    message(${Vulkan_INCLUDE_DIRS})
     include_directories(${Vulkan_INCLUDE_DIRS})
     target_link_libraries(VulkanTrial ${Vulkan_LIBRARIES})
 else()
@@ -43,3 +44,24 @@ elseif(APPLE)
 else()
     target_link_libraries(VulkanTrial GL X11 pthread Xrandr Xi dl)
 endif()
+
+# Compile shaders to SPIR-V
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/shaders)
+
+file(GLOB SHADERS "shaders/*.vert" "shaders/*.frag")
+
+foreach(SHADER ${SHADERS})
+    get_filename_component(FILENAME ${SHADER} NAME)
+    set(SPV "${CMAKE_SOURCE_DIR}/shaders/${FILENAME}.spv")
+    add_custom_command(
+        OUTPUT ${SPV}
+        COMMAND glslc ${SHADER} -o ${SPV}
+        DEPENDS ${SHADER}
+        COMMENT "Compiling ${SHADER} to SPIR-V"
+        VERBATIM
+    )
+    list(APPEND SPV_FILES ${SPV})
+endforeach()
+
+add_custom_target(Shaders ALL DEPENDS ${SPV_FILES})
+add_dependencies(VulkanTrial Shaders)
