@@ -17,6 +17,8 @@
 
 #include <glm/glm.hpp>
 
+#include <chrono>
+
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -76,8 +78,12 @@ class VulkanTriangleApp{
 
         VkBuffer vertexBuffer;
         VkDeviceMemory vertexBufferMemory;
+
         VkBuffer indexBuffer;
         VkDeviceMemory indexBufferMemory;
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
 
         bool frameBufferResized = false;
 
@@ -134,7 +140,7 @@ class VulkanTriangleApp{
             }
         };
 
-        const std::vector<Vertex> vertices = {
+        std::vector<Vertex> vertices = {
             {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
             {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
             {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
@@ -170,7 +176,7 @@ class VulkanTriangleApp{
             glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
             window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-            glfwSetWindowUserPointer(window, this);
+            glfwSetWindowUserPointer(window, this); // So any subsequent funtion callbacks use the object
             glfwSetFramebufferSizeCallback(window, frameBufferResizeCallback);
         }
 
@@ -702,6 +708,7 @@ class VulkanTriangleApp{
             VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
             inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
             inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            // inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
             inputAssembly.primitiveRestartEnable = VK_FALSE;
 
             std::vector<VkDynamicState> dynamicStates = {
@@ -882,11 +889,38 @@ class VulkanTriangleApp{
             vkBindBufferMemory(device, buffer, bufferMemory, 0);
         }
 
+        void updateVertexData() {
+            for (auto& vertex : vertices) {
+                vertex.pos.x += 0.01f;
+                vertex.pos.y += 0.01f;
+            }
+        }
+
+        void updateVertexBuffer(){
+            VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+            // VkBuffer stagingBuffer;
+            // VkDeviceMemory stagingBufferMemory;
+            
+            // createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, vertices.data(), (size_t) bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+            // vkDestroyBuffer(device, stagingBuffer, nullptr);
+            // vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
+
         void createVertexBuffer(){
             VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-            VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
+            // VkBuffer stagingBuffer;
+            // VkDeviceMemory stagingBufferMemory;
+
             createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
             void* data;
@@ -898,8 +932,8 @@ class VulkanTriangleApp{
 
             copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
-            vkDestroyBuffer(device, stagingBuffer, nullptr);
-            vkFreeMemory(device, stagingBufferMemory, nullptr);
+            // vkDestroyBuffer(device, stagingBuffer, nullptr);
+            // vkFreeMemory(device, stagingBufferMemory, nullptr);
         }
 
         void createIndexBuffer(){
@@ -1086,6 +1120,9 @@ class VulkanTriangleApp{
 
             vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
+            // updateVertexData();
+            // updateVertexBuffer();
+
             vkResetCommandBuffer(commandBuffers[currentFrame], 0);
             recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
@@ -1163,16 +1200,40 @@ class VulkanTriangleApp{
         }
 
         void mainLoop(){
+            double totalFrameTime = 0.0;
+            auto startTime = std::chrono::high_resolution_clock::now();
+            int frameCount = 0;
+
             while(!glfwWindowShouldClose(window)) {
+                auto frameStartTime = std::chrono::high_resolution_clock::now();
+
                 glfwPollEvents();
                 drawFrame();
+
+                auto frameEndTime = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double, std::milli> frameDuration = frameEndTime - frameStartTime;
+                totalFrameTime += frameDuration.count();
+                frameCount++;
             }
 
             vkDeviceWaitIdle(device);
+
+            auto endTime = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsedSeconds = endTime - startTime;
+            double averageFrameTime = totalFrameTime / frameCount;
+            double fps = 1000.0 / averageFrameTime;
+
+            std::cout << "Total elapsed time: " << elapsedSeconds.count() << " seconds\n";
+            std::cout << "Total frames: " << frameCount << "\n";
+            std::cout << "Average frame time: " << averageFrameTime << " ms\n";
+            std::cout << "Average FPS: " << fps << "\n";
         }
 
         void cleanup(){
             cleanupSwapChain();
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
 
             vkDestroyBuffer(device, vertexBuffer, nullptr);
             vkFreeMemory(device, vertexBufferMemory, nullptr);
