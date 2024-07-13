@@ -1,7 +1,7 @@
 #include "utils.h"
 
 #include "queueFamilies.cpp"
-#include "imageViews.cpp"
+#include "image.cpp"
 #include "swapChainSupportDetails.cpp"
 
 class SwapChain{
@@ -11,6 +11,7 @@ class SwapChain{
         VkFormat swapChainImageFormat;
         VkExtent2D swapChainExtent;
         std::vector<VkImageView> swapChainImageViews;
+        std::vector<VkFramebuffer> swapChainFrameBuffers;
 
         SwapChain(){}
 
@@ -20,6 +21,10 @@ class SwapChain{
 
         void setupSwapChainImageViews(VkDevice device){
             createImageViews(device);
+        }
+
+        void setupFrameBuffer(VkDevice device, VkImageView depthImageView, VkRenderPass renderPass){
+            createFrameBuffer(device, depthImageView, renderPass);
         }
     
     private:
@@ -125,7 +130,31 @@ class SwapChain{
             swapChainImageViews.resize(swapChainImages.size());
 
             for (size_t i = 0; i < swapChainImages.size(); i++){
-                swapChainImageViews[i] = ImageViews::createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, device);
+                swapChainImageViews[i] = Image::createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, device);
+            }
+        }
+
+        void createFrameBuffer(VkDevice device, VkImageView depthImageView, VkRenderPass renderPass){
+            swapChainFrameBuffers.resize(swapChainImageViews.size());
+
+            for(size_t i = 0; i < swapChainImageViews.size(); i++){
+                std::array<VkImageView, 2> attachments = {
+                    swapChainImageViews[i],
+                    depthImageView
+                };
+
+                VkFramebufferCreateInfo frameBufferInfo{};
+                frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                frameBufferInfo.renderPass = renderPass;
+                frameBufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());;
+                frameBufferInfo.pAttachments = attachments.data();
+                frameBufferInfo.width = swapChainExtent.width;
+                frameBufferInfo.height = swapChainExtent.height;
+                frameBufferInfo.layers = 1;
+
+                if (vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to create framebuffer!");
+                }
             }
         }
 };
