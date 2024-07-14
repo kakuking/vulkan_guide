@@ -29,7 +29,7 @@ class SwapChain{
             createFrameBuffer(device, depthImageView, renderPass);
         }
 
-        void recreateSwapChain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window, DepthBuffer depthBuffer, VkRenderPass renderPass){
+        void recreateSwapChain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window, DepthBuffer& depthBuffer, VkRenderPass renderPass){
             int width = 0, height = 0;
             glfwGetFramebufferSize(window, &width, &height);
             while(width == 0 || height == 0){
@@ -48,9 +48,7 @@ class SwapChain{
         }
 
         void cleanupSwapChain(VkDevice device, DepthBuffer& depthBuffer){
-            vkDestroyImageView(device, depthBuffer.depthImageView, nullptr);
-            vkDestroyImage(device, depthBuffer.depthImage, nullptr);
-            vkFreeMemory(device, depthBuffer.depthImageMemory, nullptr);
+            depthBuffer.cleanupDepthResources(device);
 
             for(size_t i = 0; i < swapChainFrameBuffers.size(); i++){
                 vkDestroyFramebuffer(device, swapChainFrameBuffers[i], nullptr);

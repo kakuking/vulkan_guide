@@ -10,7 +10,10 @@ include_directories(include)
 link_directories(${CMAKE_SOURCE_DIR}/lib)
 
 # Add source files
-file(GLOB SOURCES "src/*.cpp")
+file(GLOB SOURCES 
+    src/*.cpp
+    src/*.h
+    )
 
 # Set the linker flags to link the static C++ standard library
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
