@@ -1,5 +1,7 @@
+#pragma once
+
 #include "utils.h"
-#include "image.cpp"
+#include "image.h"
 
 class DepthBuffer{
     public:

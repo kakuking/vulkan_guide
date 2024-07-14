@@ -1,6 +1,7 @@
+#pragma once
 #include "utils.h"
 
-#include "commandBuffer.cpp"
+#include "commandBuffer.h"
 
 class Buffer{
     public:

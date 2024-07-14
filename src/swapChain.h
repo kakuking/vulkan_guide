@@ -1,8 +1,10 @@
+#pragma once
 #include "utils.h"
 
-#include "queueFamilies.cpp"
-#include "image.cpp"
-#include "swapChainSupportDetails.cpp"
+#include "queueFamilies.h"
+#include "image.h"
+#include "swapChainSupportDetails.h"
+#include "depthBuffer.h"
 
 class SwapChain{
     public:
@@ -25,6 +27,40 @@ class SwapChain{
 
         void setupFrameBuffer(VkDevice device, VkImageView depthImageView, VkRenderPass renderPass){
             createFrameBuffer(device, depthImageView, renderPass);
+        }
+
+        void recreateSwapChain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window, DepthBuffer depthBuffer, VkRenderPass renderPass){
+            int width = 0, height = 0;
+            glfwGetFramebufferSize(window, &width, &height);
+            while(width == 0 || height == 0){
+                glfwGetFramebufferSize(window, &width, &height);
+                glfwWaitEvents();
+            }
+
+            vkDeviceWaitIdle(device);
+
+            cleanupSwapChain(device, depthBuffer);
+
+            createSwapChain(physicalDevice, surface, device, window);
+            createImageViews(device);
+            depthBuffer.setupDepthResources(device, physicalDevice, swapChainExtent);
+            createFrameBuffer(device, depthBuffer.depthImageView, renderPass);
+        }
+
+        void cleanupSwapChain(VkDevice device, DepthBuffer& depthBuffer){
+            vkDestroyImageView(device, depthBuffer.depthImageView, nullptr);
+            vkDestroyImage(device, depthBuffer.depthImage, nullptr);
+            vkFreeMemory(device, depthBuffer.depthImageMemory, nullptr);
+
+            for(size_t i = 0; i < swapChainFrameBuffers.size(); i++){
+                vkDestroyFramebuffer(device, swapChainFrameBuffers[i], nullptr);
+            }
+
+            for(size_t i = 0; i < swapChainImageViews.size(); i++){
+                vkDestroyImageView(device, swapChainImageViews[i], nullptr);
+            }
+
+            vkDestroySwapchainKHR(device, swapChain, nullptr);
         }
     
     private:

@@ -1,7 +1,9 @@
+
+#pragma once
 #include "utils.h"
 
-#include "buffer.cpp"
-#include "commandBuffer.cpp"
+#include "buffer.h"
+#include "commandBuffer.h"
 
 class Image{
     public:

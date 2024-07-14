@@ -1,6 +1,7 @@
+#pragma once
 #include "utils.h"
 
-#include "debugMessenger.cpp"
+#include "debugMessenger.h"
 
 class VulkanRenderer{
     public:

@@ -1,3 +1,5 @@
+#pragma once
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -20,9 +22,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;

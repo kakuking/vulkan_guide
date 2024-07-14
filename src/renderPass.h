@@ -1,6 +1,7 @@
+#pragma once
 #include "utils.h"
 
-#include "depthBuffer.cpp"
+#include "depthBuffer.h"
 
 class RenderPass{
     public:
@@ -10,6 +11,10 @@ class RenderPass{
 
         void setupRenderPass(VkDevice device, VkPhysicalDevice physicalDevice, VkFormat swapChainImageFormat){
             createRenderPass(device, physicalDevice, swapChainImageFormat);
+        }
+
+        void cleanupRenderPass(VkDevice device){
+            vkDestroyRenderPass(device, renderPass, nullptr);
         }
     
     private:

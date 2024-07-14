@@ -1,7 +1,8 @@
+#pragma once
 #include "utils.h"
 
-#include "shaderModule.cpp"
-#include "vertex.cpp"
+#include "shaderModule.h"
+#include "vertex.h"
 
 class GraphicsPipeline{
     public:
@@ -12,6 +13,11 @@ class GraphicsPipeline{
 
         void setupGraphicsPipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, VkRenderPass renderPass){
             createGraphicsPipeline(device, descriptorSetLayout, renderPass);
+        }
+
+        void cleanupGraphicsPipeline(VkDevice device){
+            vkDestroyPipeline(device, graphicsPipeline, nullptr);
+            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         }
 
     private:

@@ -1,6 +1,7 @@
+#pragma once
 #include "utils.h"
 
-#include "queueFamilies.cpp"
+#include "queueFamilies.h"
 
 class LogicalDevice{
     public:
@@ -12,6 +13,10 @@ class LogicalDevice{
 
         void setupLogicalDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface){
             createLogicalDevice(physicalDevice, surface);
+        }
+
+        void cleanupLogicalDevice(){
+            vkDestroyDevice(device, nullptr);
         }
 
     private:

@@ -1,7 +1,8 @@
+#pragma once
 #include "utils.h"
 
-#include "buffer.cpp"
-#include "image.cpp"
+#include "buffer.h"
+#include "image.h"
 
 class Texture{
     public:
@@ -16,6 +17,13 @@ class Texture{
             createTextureImage(graphicsQueue, device, physicalDevice, commandBufferManager);
             createTextureImageView(device);
             createTextureSampler(device, physicalDevice);
+        }
+
+        void cleanupTexture(VkDevice device){
+            vkDestroySampler(device, textureSampler, nullptr);
+            vkDestroyImageView(device, textureImageView, nullptr);
+            vkDestroyImage(device, textureImage, nullptr);
+            vkFreeMemory(device, textureImageMemory, nullptr);
         }
     
     private:

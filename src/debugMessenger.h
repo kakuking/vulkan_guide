@@ -1,3 +1,5 @@
+#pragma once
+
 #include "utils.h"
 
 class DebugMessenger{

@@ -1,7 +1,8 @@
+#pragma once
 #include "utils.h"
 
-#include "vertex.cpp"
-#include "buffer.cpp"
+#include "vertex.h"
+#include "buffer.h"
 
 class Geometry{
     public:
@@ -34,6 +35,17 @@ class Geometry{
         void setupGeometry(VkQueue graphicsQueue, VkDevice device, VkPhysicalDevice physicalDevice, CommandBuffer commandBufferManager){
             createVertexBuffer(graphicsQueue, device, physicalDevice, commandBufferManager);
             createIndexBuffer(graphicsQueue, device, physicalDevice, commandBufferManager);
+        }
+
+        void cleanupGeometry(VkDevice device){
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+            vkDestroyBuffer(device, vertexBuffer, nullptr);
+            vkFreeMemory(device, vertexBufferMemory, nullptr);
+
+            vkDestroyBuffer(device, indexBuffer, nullptr);
+            vkFreeMemory(device, indexBufferMemory, nullptr);
         }
 
     private:

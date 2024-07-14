@@ -1,7 +1,8 @@
+#pragma once
 #include "utils.h"
 
-#include "queueFamilies.cpp"
-#include "swapChainSupportDetails.cpp"
+#include "queueFamilies.h"
+#include "swapChainSupportDetails.h"
 
 class PhysicalDevice{
     public:
