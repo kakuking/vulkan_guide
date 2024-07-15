@@ -51,6 +51,7 @@ class Renderer{
         
 
         void initVulkan(){
+            // Nothing to Change
             instance.setupInstance();
             debugMessenger.setupDebugMessenger(instance.instance);
             surface.setupSurface(instance.instance, window.window);
@@ -59,20 +60,27 @@ class Renderer{
             swapChain.setupSwapChain(physicalDevice.physicalDevice, surface.surface, logicalDevice.device, window.window);
             swapChain.setupSwapChainImageViews(logicalDevice.device);
             renderPass.setupRenderPass(logicalDevice.device, physicalDevice.physicalDevice, swapChain.swapChainImageFormat);
-            descriptors.setupDescriptorSetLayout(logicalDevice.device);
-            graphicsPipeline.setupGraphicsPipeline(logicalDevice.device, descriptors.descriptorSetLayout, renderPass.renderPass);
+
+            // Things I can append to
+            texture.filenames.push_back("static\\texture_1.jpg");
+            texture.filenames.push_back("static\\texture_0.jpg");
+
+            descriptors.setupDescriptorSetLayout(logicalDevice.device, texture);
+
+            // Nothing to Change
             commandBuffer.setupCommandBuffer(logicalDevice.device, physicalDevice.physicalDevice, surface.surface);
             depthBuffer.setupDepthResources(logicalDevice.device, physicalDevice.physicalDevice, swapChain.swapChainExtent);
             swapChain.setupFrameBuffer(logicalDevice.device, depthBuffer.depthImageView, renderPass.renderPass);
+
+            // Things to append to
             texture.setupTexture(logicalDevice.graphicsQueue, logicalDevice.device, physicalDevice.physicalDevice, commandBuffer);
+            descriptors.setupUniformBuffersDescriptorPoolsAndSets(logicalDevice.device, physicalDevice.physicalDevice, texture.textureImageViews, texture.textureSamplers);
             geometry.setupGeometry(logicalDevice.graphicsQueue, logicalDevice.device, physicalDevice.physicalDevice, commandBuffer);
-            descriptors.setupUniformBuffersDescriptorPoolsAndSets(logicalDevice.device, physicalDevice.physicalDevice, texture.textureImageView, texture.textureSampler);
+
+            // Nothing to change
+            graphicsPipeline.setupGraphicsPipeline(logicalDevice.device, descriptors.descriptorSetLayout, renderPass.renderPass);
             commandBuffer.createCommandBuffers(logicalDevice.device);
             sync.setupSyncObjects(logicalDevice.device);
-        }
-        
-        bool hasStencilComponent(VkFormat format){
-            return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
         }
 
         void drawFrame(
@@ -91,7 +99,6 @@ class Renderer{
             uint32_t& currentFrame,
             SwapChain& swapChain,
             Geometry& geometry
-
             ){
             vkWaitForFences(logicalDevice.device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 

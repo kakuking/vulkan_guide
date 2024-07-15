@@ -42,13 +42,24 @@ class LogicalDevice{
             VkPhysicalDeviceFeatures deviceFeatures{};
             deviceFeatures.samplerAnisotropy = VK_TRUE;
 
+            VkPhysicalDeviceVulkan12Features deviceFeatures12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+            deviceFeatures12.descriptorIndexing = VK_TRUE;
+            deviceFeatures12.runtimeDescriptorArray = VK_TRUE;
+            deviceFeatures12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+            deviceFeatures12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+
+            VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+            features.features = deviceFeatures;
+            features.pNext = &deviceFeatures12;
+
             VkDeviceCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
             
             createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
             createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-            createInfo.pEnabledFeatures = &deviceFeatures;
+            createInfo.pEnabledFeatures = nullptr;
+            createInfo.pNext = &features;
 
             createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
             createInfo.ppEnabledExtensionNames = deviceExtensions.data();

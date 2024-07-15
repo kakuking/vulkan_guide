@@ -64,6 +64,7 @@ class PhysicalDevice{
             vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
 
             std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+            // requiredExtensions.insert("")
 
             for (const auto& extension: availableExtensions) {
                 requiredExtensions.erase(extension.extensionName);

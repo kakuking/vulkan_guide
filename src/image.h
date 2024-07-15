@@ -62,7 +62,7 @@ class Image{
             return imageView;
         }
 
-        static void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, VkDevice device, VkQueue graphicsQueue, CommandBuffer commandBufferManager) {
+        static void transitionImageLayout(VkImage& image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, VkDevice device, VkQueue graphicsQueue, CommandBuffer commandBufferManager) {
             VkCommandBuffer commandBuffer = commandBufferManager.beginSingleTimeCommands(device);
             
             VkImageMemoryBarrier barrier{};
@@ -111,7 +111,7 @@ class Image{
             commandBufferManager.endSingleTimeCommands(commandBuffer, graphicsQueue, device);
         }
 
-        static void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, VkDevice device, VkQueue graphicsQueue, CommandBuffer commandBufferManager){
+        static void copyBufferToImage(VkBuffer& buffer, VkImage& image, uint32_t width, uint32_t height, VkDevice device, VkQueue graphicsQueue, CommandBuffer commandBufferManager){
             VkCommandBuffer commandBuffer = commandBufferManager.beginSingleTimeCommands(device);
 
             VkBufferImageCopy region{};

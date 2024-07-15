@@ -4,7 +4,8 @@
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 color;
-    glm::vec2 texCoord;
+    glm::vec3 texCoord;
+    //alignas(8) glm::uint32_t texIndex;
 
     static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
@@ -31,8 +32,13 @@ struct Vertex {
 
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
+        // attributeDescriptions[3].binding = 0;
+        // attributeDescriptions[3].location = 3;
+        // attributeDescriptions[3].format = VK_FORMAT_R32_UINT;
+        // attributeDescriptions[3].offset = offsetof(Vertex, texIndex);
 
         return attributeDescriptions;
     }

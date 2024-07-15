@@ -3,33 +3,49 @@
 
 #include "buffer.h"
 #include "image.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 class Texture{
     public:
-        VkImage textureImage;
-        VkDeviceMemory textureImageMemory;
-        VkImageView textureImageView;
-        VkSampler textureSampler;
+        std::vector<const char*> filenames;
+        std::vector<VkImage> textureImages;
+        std::vector<VkDeviceMemory> textureImageMemories;
+        std::vector<VkImageView> textureImageViews;
+        std::vector<VkSampler> textureSamplers;
 
         Texture(){}
 
-        void setupTexture(VkQueue graphicsQueue, VkDevice device, VkPhysicalDevice physicalDevice, CommandBuffer commandBufferManager){
-            createTextureImage(graphicsQueue, device, physicalDevice, commandBufferManager);
-            createTextureImageView(device);
-            createTextureSampler(device, physicalDevice);
+        void setupTexture(VkQueue graphicsQueue, VkDevice device, VkPhysicalDevice physicalDevice, CommandBuffer& commandBufferManager){
+            size_t numberOftextures = filenames.size();
+            textureImages.resize(numberOftextures);
+            textureImageViews.resize(numberOftextures);
+            textureImageMemories.resize(numberOftextures);
+            textureSamplers.resize(numberOftextures);
+
+            for (size_t i = 0; i < filenames.size(); i++)
+            {
+                createTextureImage(i, graphicsQueue, device, physicalDevice, commandBufferManager);
+                createTextureImageView(i, device);
+                createTextureSampler(i, device, physicalDevice);
+            }
         }
 
         void cleanupTexture(VkDevice device){
-            vkDestroySampler(device, textureSampler, nullptr);
-            vkDestroyImageView(device, textureImageView, nullptr);
-            vkDestroyImage(device, textureImage, nullptr);
-            vkFreeMemory(device, textureImageMemory, nullptr);
+            for (size_t i = 0; i < filenames.size(); i++)
+            {
+                vkDestroyImageView(device, textureImageViews[i], nullptr);
+                vkDestroyImage(device, textureImages[i], nullptr);
+                vkFreeMemory(device, textureImageMemories[i], nullptr);
+                vkDestroySampler(device, textureSamplers[i], nullptr);
+            }
         }
     
     private:
-        void createTextureImage(VkQueue graphicsQueue, VkDevice device, VkPhysicalDevice physicalDevice, CommandBuffer commandBufferManager){
+        void createTextureImage(size_t currentImage, VkQueue graphicsQueue, VkDevice device, VkPhysicalDevice physicalDevice, CommandBuffer commandBufferManager){
             int texWidth, texHeight, texChannels;
-            stbi_uc* pixels = stbi_load("static\\texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            // stbi_uc* pixels = stbi_load("static\\texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            stbi_uc* pixels = stbi_load(filenames[currentImage], &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             VkDeviceSize imageSize = texWidth * texHeight * 4;
 
             if (!pixels) {
@@ -48,23 +64,23 @@ class Texture{
 
             stbi_image_free(pixels);
 
-            Image::createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, physicalDevice, device);
+            Image::createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImages[currentImage], textureImageMemories[currentImage], physicalDevice, device);
 
-            Image::transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, device, graphicsQueue, commandBufferManager);
+            Image::transitionImageLayout(textureImages[currentImage], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, device, graphicsQueue, commandBufferManager);
 
-            Image::copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), device, graphicsQueue, commandBufferManager);
+            Image::copyBufferToImage(stagingBuffer, textureImages[currentImage], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), device, graphicsQueue, commandBufferManager);
 
-            Image::transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, device, graphicsQueue,  commandBufferManager);
+            Image::transitionImageLayout(textureImages[currentImage], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, device, graphicsQueue,  commandBufferManager);
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingBufferMemory, nullptr);
         }
 
-        void createTextureImageView(VkDevice device){
-            textureImageView = Image::createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, device);
+        void createTextureImageView(size_t currentImage, VkDevice device){
+            textureImageViews[currentImage] = Image::createImageView(textureImages[currentImage], VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, device);
         }
 
-        void createTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice){
+        void createTextureSampler(size_t currentImage, VkDevice device, VkPhysicalDevice physicalDevice){
             VkSamplerCreateInfo samplerInfo{};
             samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
             samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -92,7 +108,7 @@ class Texture{
             samplerInfo.minLod = 0.0f;
             samplerInfo.maxLod = 0.0f;
 
-            if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+            if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSamplers[currentImage]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create texture sampler!");
             }
         }
