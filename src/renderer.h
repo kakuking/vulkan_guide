@@ -62,8 +62,9 @@ class Renderer{
             renderPass.setupRenderPass(logicalDevice.device, physicalDevice.physicalDevice, swapChain.swapChainImageFormat);
 
             // Things I can append to
-            texture.filenames.push_back("static\\texture_1.jpg");
             texture.filenames.push_back("static\\texture_0.jpg");
+            texture.filenames.push_back("static\\texture_1.jpg");
+            texture.filenames.push_back("static\\texture_2.jpg"); 
 
             descriptors.setupDescriptorSetLayout(logicalDevice.device, texture);
 

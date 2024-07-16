@@ -53,6 +53,8 @@ class Descriptors{
             uboLayoutBinding.pImmutableSamplers = nullptr;
             uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+            std::cout << "Number of textures: " << numberOfTextures << std::endl;
+
             VkDescriptorSetLayoutBinding  samplerLayoutBinding{};
             samplerLayoutBinding.binding = 1;
             samplerLayoutBinding.descriptorCount = numberOfTextures;
@@ -132,7 +134,7 @@ class Descriptors{
             VkDescriptorSetAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+            allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
             allocInfo.pSetLayouts = layouts.data();
 
             descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
@@ -168,7 +170,7 @@ class Descriptors{
                 descriptorWrites[1].dstBinding = 1;
                 descriptorWrites[1].dstArrayElement = 0;
                 descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                descriptorWrites[1].descriptorCount = numberOfTextures;
+                descriptorWrites[1].descriptorCount = static_cast<uint32_t>(imageInfos.size());
                 descriptorWrites[1].pImageInfo = imageInfos.data();
 
                 vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
