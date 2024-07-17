@@ -1,7 +1,7 @@
 #pragma once
 #include "utils.h"
 
-#include "vertex.h"
+#include "userEditableVertex.h"
 #include "buffer.h"
 
 class Geometry{

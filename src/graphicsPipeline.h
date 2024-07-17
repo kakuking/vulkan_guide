@@ -2,7 +2,7 @@
 #include "utils.h"
 
 #include "shaderModule.h"
-#include "vertex.h"
+#include "userEditableVertex.h"
 
 class GraphicsPipeline{
     public:

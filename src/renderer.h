@@ -1,10 +1,11 @@
 #pragma once
 #include "utils.h"
 
-#include "vertex.h"
+#include "userEditableVertex.h"
 #include "queueFamilies.h"
 #include "swapChainSupportDetails.h"
-#include "uniformBufferObject.h"
+#include "userEditableUniformBufferObject.h"
+#include "userEditableGeometry.h"
 
 #include "window.h"
 #include "vulkanRenderer.h"
@@ -14,16 +15,17 @@
 #include "logicalDevice.h"
 #include "swapChain.h"
 #include "renderPass.h"
-#include "descriptors.h"
 #include "graphicsPipeline.h"
+#include "descriptors.h"
 #include "commandBuffer.h"
 #include "depthBuffer.h"
 #include "texture.h"
-#include "geometry.h"
 #include "sync.h"
 
 class Renderer{
     public:
+        Texture texture;
+
         void run(){
             window.init();
             initVulkan();
@@ -45,10 +47,8 @@ class Renderer{
         GraphicsPipeline graphicsPipeline;
         CommandBuffer commandBuffer;
         DepthBuffer depthBuffer;
-        Texture texture;
         Geometry geometry;
         Sync sync;
-        
 
         void initVulkan(){
             // Nothing to Change
@@ -62,9 +62,9 @@ class Renderer{
             renderPass.setupRenderPass(logicalDevice.device, physicalDevice.physicalDevice, swapChain.swapChainImageFormat);
 
             // Things I can append to
-            texture.filenames.push_back("static\\texture_0.jpg");
-            texture.filenames.push_back("static\\texture_1.jpg");
-            texture.filenames.push_back("static\\texture_2.jpg"); 
+            // texture.filenames.push_back("static\\texture_0.jpg");
+            // texture.filenames.push_back("static\\texture_1.jpg");
+            // texture.filenames.push_back("static\\texture_2.jpg"); 
 
             descriptors.setupDescriptorSetLayout(logicalDevice.device, texture);
 
