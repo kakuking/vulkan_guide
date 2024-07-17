@@ -4,7 +4,7 @@ project(VulkanTrial)
 set(CMAKE_CXX_STANDARD 17)
 
 # Include directories
-include_directories(include)
+include_directories(include include/vkbootstrap)
 
 # Link directories
 link_directories(${CMAKE_SOURCE_DIR}/lib)
