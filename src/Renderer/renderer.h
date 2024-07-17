@@ -1,11 +1,11 @@
 #pragma once
 #include "utils.h"
 
-#include "userEditableVertex.h"
+#include "../userEditableVertex.h"
 #include "queueFamilies.h"
 #include "swapChainSupportDetails.h"
-#include "userEditableUniformBufferObject.h"
-#include "userEditableGeometry.h"
+#include "../userEditableUniformBufferObject.h"
+#include "../userEditableGeometry.h"
 
 #include "window.h"
 #include "vulkanRenderer.h"

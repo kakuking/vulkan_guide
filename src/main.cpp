@@ -1,6 +1,6 @@
-#include "utils.h"
+#include "Renderer/utils.h"
 
-#include "renderer.h"
+#include "Renderer/renderer.h"
 
 int main() {
     Renderer app;

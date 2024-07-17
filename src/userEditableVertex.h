@@ -1,5 +1,6 @@
 #pragma once
-#include "utils.h"
+
+#include "Renderer/utils.h"
 
 struct Vertex {
     glm::vec3 pos;

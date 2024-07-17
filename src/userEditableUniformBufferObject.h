@@ -1,7 +1,7 @@
 #pragma once
 
-#include "utils.h"
-#include "buffer.h"
+#include "Renderer/utils.h"
+#include "Renderer/buffer.h"
 
 struct UniformBufferObject {
     alignas(16) glm::mat4 model;
