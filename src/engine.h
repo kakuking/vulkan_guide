@@ -3,10 +3,13 @@
 #include "utils.h"
 
 #include "initializers.h"
+#include "images.h"
 
 struct FrameData {
     VkCommandPool commandPool;
     VkCommandBuffer mainCommandBuffer;
+    VkSemaphore swapchainSemaphore, renderSemaphore;
+    VkFence renderFence;
 };
 
 
@@ -35,7 +38,9 @@ public:
     void init(){
         setupWindow();
         setupVulkan();
-        
+        setupSwapchain();
+        setupCommandResources();
+        setupSyncStructures();
     }
 
     void run(){
@@ -67,16 +72,16 @@ public:
         fmt::println("Average FPS: {}", fps);
     }
 
-    void draw(){
-        
-    }
-
     void cleanup(){
         vkDeviceWaitIdle(device);
 
         for (size_t i = 0; i < FRAME_OVERLAP; i++)
         {
             vkDestroyCommandPool(device, frames[i].commandPool, nullptr);
+
+            vkDestroyFence(device, frames[i].renderFence, nullptr);
+            vkDestroySemaphore(device, frames[i].renderSemaphore, nullptr);
+            vkDestroySemaphore(device, frames[i].swapchainSemaphore, nullptr);
         }
         
 
@@ -93,6 +98,57 @@ public:
 private:
     double FPS;
 
+    void draw(){
+        VK_CHECK(vkWaitForFences(device, 1, &getCurrentFrame().renderFence, VK_TRUE, 1000000000)); // timeout of 1 second
+        VK_CHECK(vkResetFences(device, 1, &getCurrentFrame().renderFence));
+
+        uint32_t swapchainImageIndex;
+        VK_CHECK(vkAcquireNextImageKHR(device, swapchain, 1000000000, getCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex));
+
+        VkCommandBuffer command = getCurrentFrame().mainCommandBuffer;
+
+        VK_CHECK(vkResetCommandBuffer(command, 0));
+        VkCommandBufferBeginInfo beginInfo = Initializers::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        VK_CHECK(vkBeginCommandBuffer(command, &beginInfo));
+
+        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+        VkClearColorValue clearValue;
+        float flash = std::abs(std::sin(frameNumber/120.f));
+        clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+        VkImageSubresourceRange clearRange = Initializers::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+
+        vkCmdClearColorImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+        VK_CHECK(vkEndCommandBuffer(command));
+
+        VkCommandBufferSubmitInfo commandInfo = Initializers::commandBufferSubmitInfo(command);
+
+        VkSemaphoreSubmitInfo waitInfo = Initializers::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, getCurrentFrame().swapchainSemaphore);
+        VkSemaphoreSubmitInfo signalInfo = Initializers::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame().renderSemaphore);
+
+        VkSubmitInfo2 submitInfo = Initializers::submitInfo(&commandInfo, &signalInfo, &waitInfo);
+
+        VK_CHECK(vkQueueSubmit2(graphicsQueue, 1, &submitInfo, getCurrentFrame().renderFence));
+
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.pNext = nullptr;
+        presentInfo.pSwapchains = &swapchain;
+        presentInfo.swapchainCount = 1;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &getCurrentFrame().renderSemaphore;
+
+        presentInfo.pImageIndices = &swapchainImageIndex;
+        VK_CHECK(vkQueuePresentKHR(graphicsQueue, &presentInfo));
+
+        frameNumber++;
+    }
+
     void setupWindow(){
         glfwInit();
 
@@ -106,8 +162,6 @@ private:
         vkb::Instance vkb_instance = setupInstanceAndDebugMessenger();
         setupSurface();
         setupPhysicalDevice(vkb_instance);
-        setupSwapchain();
-        setupCommandResources();
     }
 
     vkb::Instance setupInstanceAndDebugMessenger(){
@@ -207,6 +261,20 @@ private:
             VkCommandBufferAllocateInfo allocInfo = Initializers::commandBufferAllocateInfo(frames[i].commandPool, 1);
 
             VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &frames[i].mainCommandBuffer));
+        }
+        
+    }
+
+    void setupSyncStructures(){
+        VkFenceCreateInfo fenceCreateInfo = Initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+        VkSemaphoreCreateInfo semaphoreCreateInfo = Initializers::semaphoreCreateInfo();
+
+        for (size_t i = 0; i < FRAME_OVERLAP; i++)
+        {
+            VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &frames[i].renderFence));
+
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].swapchainSemaphore));
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].renderSemaphore));
         }
         
     }
