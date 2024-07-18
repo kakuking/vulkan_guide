@@ -2,6 +2,6 @@
 
 cmake -G "MinGW Makefiles" -B build
 cd .\build
-cmake ..
+@REM cmake ..
 mingw32-make
-.\VulkanTrial.exe
+.\VulkanEngine.exe

@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-project(VulkanTrial)
+project(VulkanEngine)
 
 set(CMAKE_CXX_STANDARD 17)
 
 # Include directories
-include_directories(include include/vkbootstrap)
+include_directories(include)
 
 # Link directories
 link_directories(${CMAKE_SOURCE_DIR}/lib)
@@ -19,33 +19,51 @@ file(GLOB SOURCES
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 
 # Create executable
-add_executable(VulkanTrial ${SOURCES})
+add_executable(VulkanEngine ${SOURCES})
 
 # Find Vulkan package
 find_package(Vulkan REQUIRED)
 if (Vulkan_FOUND)
     message(${Vulkan_INCLUDE_DIRS})
     include_directories(${Vulkan_INCLUDE_DIRS})
-    target_link_libraries(VulkanTrial ${Vulkan_LIBRARIES})
+    target_link_libraries(VulkanEngine ${Vulkan_LIBRARIES})
 else()
     message(FATAL_ERROR "Could not find Vulkan library!")
 endif()
 
-# Link GLFW library
-target_link_libraries(VulkanTrial glfw3)
+# Add subdirectories
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(third-party/fmt)
+add_subdirectory(third-party/glfw)
+add_subdirectory(third-party/glm)
+add_subdirectory(third-party/vkbootstrap)
+
+# Ensure GLFW include directories are set
+target_include_directories(VulkanEngine PRIVATE third-party/glfw/include)
+target_include_directories(VulkanEngine PRIVATE third-party/glm)
+target_include_directories(VulkanEngine PRIVATE third-party/fmt/include)
+
+# Link libraries
+target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap)
+# target_link_libraries(VulkanEngine fmt)
+# target_link_libraries(VulkanEngine glm)
+
 
 # Link other necessary libraries
 if (WIN32)
-    target_link_libraries(VulkanTrial ${CMAKE_DL_LIBS})
-    target_link_libraries(VulkanTrial opengl32 gdi32 user32)
+    target_link_libraries(VulkanEngine ${CMAKE_DL_LIBS})
+    target_link_libraries(VulkanEngine opengl32 gdi32 user32)
 elseif(APPLE)
     find_library(COCOA Cocoa)
     find_library(IOKIT IOKit)
     find_library(CORE_FOUNDATION CoreFoundation)
     find_library(CORE_VIDEO CoreVideo)
-    target_link_libraries(VulkanTrial ${COCOA} ${IOKIT} ${CORE_FOUNDATION} ${CORE_VIDEO})
+    target_link_libraries(VulkanEngine ${COCOA} ${IOKIT} ${CORE_FOUNDATION} ${CORE_VIDEO})
 else()
-    target_link_libraries(VulkanTrial GL X11 pthread Xrandr Xi dl)
+    target_link_libraries(VulkanEngine GL X11 pthread Xrandr Xi dl)
 endif()
 
 # Compile shaders to SPIR-V
@@ -69,10 +87,9 @@ foreach(SHADER ${SHADERS})
 endforeach()
 
 add_custom_target(Shaders ALL DEPENDS ${SPV_FILES})
-add_dependencies(VulkanTrial Shaders)
+add_dependencies(VulkanEngine Shaders)
 
 # Copying Static Folder
-
 set(source_dir "static")
 set(dst_dir "${CMAKE_BINARY_DIR}")
 file(COPY ${source_dir} DESTINATION ${dst_dir})
