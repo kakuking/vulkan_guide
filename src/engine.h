@@ -2,6 +2,14 @@
 
 #include "utils.h"
 
+#include "initializers.h"
+
+struct FrameData {
+    VkCommandPool commandPool;
+    VkCommandBuffer mainCommandBuffer;
+};
+
+
 class Engine {
 public:    
     GLFWwindow* window;
@@ -11,6 +19,11 @@ public:
     VkDevice device;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
+
+    FrameData frames[FRAME_OVERLAP];
+    uint32_t frameNumber;
+    VkQueue graphicsQueue;
+    uint32_t graphicsQueueFamily;
     
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
@@ -59,6 +72,14 @@ public:
     }
 
     void cleanup(){
+        vkDeviceWaitIdle(device);
+
+        for (size_t i = 0; i < FRAME_OVERLAP; i++)
+        {
+            vkDestroyCommandPool(device, frames[i].commandPool, nullptr);
+        }
+        
+
         destroySwapchain();
 
         vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -86,6 +107,7 @@ private:
         setupSurface();
         setupPhysicalDevice(vkb_instance);
         setupSwapchain();
+        setupCommandResources();
     }
 
     vkb::Instance setupInstanceAndDebugMessenger(){
@@ -137,6 +159,9 @@ private:
 
         device = vkb_device.device;
         physicalDevice = vkb_device.physical_device;
+
+        graphicsQueue = vkb_device.get_queue(vkb::QueueType::graphics).value();
+        graphicsQueueFamily = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
     }
 
     void setupSwapchain(){
@@ -164,6 +189,24 @@ private:
         for (size_t i = 0; i < swapchainImageViews.size(); i++)
         {
             vkDestroyImageView(device, swapchainImageViews[i], nullptr);
+        }
+        
+    }
+
+    FrameData& getCurrentFrame() {
+        return frames[frameNumber % FRAME_OVERLAP];
+    }
+
+    void setupCommandResources(){
+        VkCommandPoolCreateInfo createInfo = Initializers::commandPoolCreateInfo(graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+;
+        for (size_t i = 0; i < FRAME_OVERLAP; i++)
+        {
+            VK_CHECK(vkCreateCommandPool(device, &createInfo, nullptr, &frames[i].commandPool));
+
+            VkCommandBufferAllocateInfo allocInfo = Initializers::commandBufferAllocateInfo(frames[i].commandPool, 1);
+
+            VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &frames[i].mainCommandBuffer));
         }
         
     }

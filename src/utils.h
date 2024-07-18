@@ -2,6 +2,7 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <vulkan/vk_enum_string_helper.h>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -23,3 +24,15 @@
 const uint32_t WIDTH = 800, HEIGHT = 600;
 
 const bool USE_VALIDATION_LAYERS = true;
+
+const uint32_t FRAME_OVERLAP = 2; // I think same as MAX_FRAMES_IN_FLIGHT
+
+// MACRO for VK_SUCCESS check
+#define VK_CHECK(x)                                                     \
+    do {                                                                \
+        VkResult err = x;                                               \
+        if (err) {                                                      \
+            fmt::println("Detected Vulkan error: {}", string_VkResult(err)); \
+            abort();                                                    \
+        }                                                               \
+    } while (0)
