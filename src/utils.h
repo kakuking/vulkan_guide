@@ -20,6 +20,8 @@
 #include <optional> // Used in vkb
 
 #include <vector>   // Using vectors in places including swapchain images and views
+#include <deque>
+#include <functional>
 
 const uint32_t WIDTH = 800, HEIGHT = 600;
 

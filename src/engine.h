@@ -5,13 +5,31 @@
 #include "initializers.h"
 #include "images.h"
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 struct FrameData {
     VkCommandPool commandPool;
     VkCommandBuffer mainCommandBuffer;
     VkSemaphore swapchainSemaphore, renderSemaphore;
     VkFence renderFence;
+    DeletionQueue deletionQueue;
 };
 
+struct DeletionQueue{
+    std::deque<std::function<void()>> deletors;
+
+    void pushFunction(std::function<void()>&& function) {
+        deletors.push_back(function);
+    }
+
+    void flush() {
+        for(auto it = deletors.rbegin(); it != deletors.rend(); it++){
+            (*it)();
+        }
+        deletors.clear();
+    }
+};
 
 class Engine {
 public:    
@@ -32,6 +50,9 @@ public:
     std::vector<VkImageView> swapchainImageViews;
     VkExtent2D swapchainExtent;
     VkFormat swapchainImageFormat;
+
+    DeletionQueue mainDeletionQueue;
+    VmaAllocator allocator;
 
     Engine(){}
 
@@ -84,6 +105,7 @@ public:
             vkDestroySemaphore(device, frames[i].swapchainSemaphore, nullptr);
         }
         
+        mainDeletionQueue.flush();
 
         destroySwapchain();
 
@@ -100,6 +122,9 @@ private:
 
     void draw(){
         VK_CHECK(vkWaitForFences(device, 1, &getCurrentFrame().renderFence, VK_TRUE, 1000000000)); // timeout of 1 second
+
+        getCurrentFrame().deletionQueue.flush();
+
         VK_CHECK(vkResetFences(device, 1, &getCurrentFrame().renderFence));
 
         uint32_t swapchainImageIndex;
@@ -162,6 +187,17 @@ private:
         vkb::Instance vkb_instance = setupInstanceAndDebugMessenger();
         setupSurface();
         setupPhysicalDevice(vkb_instance);
+
+        VmaAllocatorCreateInfo allocatorInfo{};
+        allocatorInfo.physicalDevice = physicalDevice;
+        allocatorInfo.device = device;
+        allocatorInfo.instance = instance;
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        vmaCreateAllocator(&allocatorInfo, &allocator);
+
+        mainDeletionQueue.pushFunction([&]() {
+            vmaDestroyAllocator(allocator);
+        });
     }
 
     vkb::Instance setupInstanceAndDebugMessenger(){

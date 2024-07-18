@@ -46,8 +46,11 @@ target_include_directories(VulkanEngine PRIVATE third-party/glfw/include)
 target_include_directories(VulkanEngine PRIVATE third-party/glm)
 target_include_directories(VulkanEngine PRIVATE third-party/fmt/include)
 
+add_library(vma INTERFACE)
+
 # Link libraries
 target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap)
+target_include_directories(vma INTERFACE third-party/vma)
 # target_link_libraries(VulkanEngine fmt)
 # target_link_libraries(VulkanEngine glm)
 
