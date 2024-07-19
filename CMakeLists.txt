@@ -48,11 +48,28 @@ target_include_directories(VulkanEngine PRIVATE third-party/fmt/include)
 
 add_library(vma INTERFACE)
 
+add_library(imgui STATIC)
+
+target_include_directories(imgui PUBLIC third-party/imgui)
+
+target_sources(imgui PRIVATE 
+    third-party/imgui/imgui.h
+    third-party/imgui/imgui.cpp
+
+    third-party/imgui/imgui_demo.cpp
+    third-party/imgui/imgui_draw.cpp
+    third-party/imgui/imgui_widgets.cpp
+    third-party/imgui/imgui_tables.cpp
+    third-party/imgui/backends/imgui_impl_vulkan.cpp
+    third-party/imgui/backends/imgui_impl_glfw.cpp
+    )
+
+target_include_directories(imgui PUBLIC third-party/imgui/backends)
+target_link_libraries(imgui PUBLIC ${Vulkan_LIBRARIES} glfw)
+
 # Link libraries
 target_include_directories(vma INTERFACE third-party/vma)
-target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap vma)
-# target_link_libraries(VulkanEngine fmt)
-# target_link_libraries(VulkanEngine glm)
+target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap vma imgui)
 
 
 # Link other necessary libraries
