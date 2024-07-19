@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(VulkanEngine)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # Include directories
 include_directories(include)
@@ -49,8 +49,8 @@ target_include_directories(VulkanEngine PRIVATE third-party/fmt/include)
 add_library(vma INTERFACE)
 
 # Link libraries
-target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap)
 target_include_directories(vma INTERFACE third-party/vma)
+target_link_libraries(VulkanEngine glfw fmt glm vk-bootstrap vma)
 # target_link_libraries(VulkanEngine fmt)
 # target_link_libraries(VulkanEngine glm)
 
@@ -73,7 +73,7 @@ endif()
 # file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/shaders)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)      # uncomment to compile shaders to build/shaders
 
-file(GLOB SHADERS "shaders/*.vert" "shaders/*.frag")
+file(GLOB SHADERS "shaders/*.vert" "shaders/*.frag" "shaders/*.comp")
 
 foreach(SHADER ${SHADERS})
     get_filename_component(FILENAME ${SHADER} NAME)

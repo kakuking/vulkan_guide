@@ -4,32 +4,8 @@
 
 #include "initializers.h"
 #include "images.h"
-
-#define VMA_IMPLEMENTATION
-#include "vk_mem_alloc.h"
-
-struct FrameData {
-    VkCommandPool commandPool;
-    VkCommandBuffer mainCommandBuffer;
-    VkSemaphore swapchainSemaphore, renderSemaphore;
-    VkFence renderFence;
-    DeletionQueue deletionQueue;
-};
-
-struct DeletionQueue{
-    std::deque<std::function<void()>> deletors;
-
-    void pushFunction(std::function<void()>&& function) {
-        deletors.push_back(function);
-    }
-
-    void flush() {
-        for(auto it = deletors.rbegin(); it != deletors.rend(); it++){
-            (*it)();
-        }
-        deletors.clear();
-    }
-};
+#include "structs.h"
+#include "pipelines.h"
 
 class Engine {
 public:    
@@ -51,8 +27,19 @@ public:
     VkExtent2D swapchainExtent;
     VkFormat swapchainImageFormat;
 
+    AllocatedImage drawImage;
+    VkExtent2D drawExtent;
+
     DeletionQueue mainDeletionQueue;
     VmaAllocator allocator;
+
+    DescriptorAllocator globalDescriptorAllocator;
+
+    VkDescriptorSet drawImageDescriptors;
+    VkDescriptorSetLayout drawImageDescriptorLayout;
+
+    VkPipeline gradientPipeline;
+    VkPipelineLayout gradientPipelineLayout;
 
     Engine(){}
 
@@ -62,6 +49,8 @@ public:
         setupSwapchain();
         setupCommandResources();
         setupSyncStructures();
+        setupDescriptors();
+        setupPipeline();
     }
 
     void run(){
@@ -133,20 +122,28 @@ private:
         VkCommandBuffer command = getCurrentFrame().mainCommandBuffer;
 
         VK_CHECK(vkResetCommandBuffer(command, 0));
+
+        // Set DrawExtent
+        drawExtent.width = drawImage.imageExtent.width;
+        drawExtent.height = drawImage.imageExtent.height;
+
         VkCommandBufferBeginInfo beginInfo = Initializers::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         VK_CHECK(vkBeginCommandBuffer(command, &beginInfo));
 
-        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        // Transition to general layout so we can draw to it
+        Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-        VkClearColorValue clearValue;
-        float flash = std::abs(std::sin(frameNumber/120.f));
-        clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+        // Draw to drawImage.image
+        draw_background(command);
 
-        VkImageSubresourceRange clearRange = Initializers::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        // Transition drawImage to src optimal and swapchain to dst optimal
+        Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        vkCmdClearColorImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
-
-        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        // Copies drawImage to swapchainImage
+        Utility::copyImageToImage(command, drawImage.image, swapchainImages[swapchainImageIndex], drawExtent, swapchainExtent);
+        // Transition swapchain to present
+        Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
         VK_CHECK(vkEndCommandBuffer(command));
 
@@ -271,6 +268,38 @@ private:
         swapchain = vkb_swapchain.swapchain;
         swapchainImages = vkb_swapchain.get_images().value();
         swapchainImageViews = vkb_swapchain.get_image_views().value();
+
+        VkExtent3D drawImageExtent = {
+            swapchainExtent.width,
+            swapchainExtent.height
+        };
+
+        drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        drawImage.imageExtent = drawImageExtent;
+
+        VkImageUsageFlags drawImageUsage{};
+        drawImageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        drawImageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        drawImageUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        drawImageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        VkImageCreateInfo rimageInfo = Initializers::imageCreateInfo(drawImage.imageFormat, drawImageUsage, drawImageExtent);
+
+        VmaAllocationCreateInfo rimageAllocInfo{};
+        rimageAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        rimageAllocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        VK_CHECK(vmaCreateImage(allocator, &rimageInfo, &rimageAllocInfo, &drawImage.image, &drawImage.allocation, nullptr));
+
+        VkImageViewCreateInfo rviewInfo = Initializers::imageViewCreateInfo(drawImage.imageFormat, drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VK_CHECK(vkCreateImageView(device, &rviewInfo, nullptr, &drawImage.imageView));
+
+        mainDeletionQueue.pushFunction([=](){
+            vkDestroyImageView(device, drawImage.imageView, nullptr);
+            vmaDestroyImage(allocator, drawImage.image, drawImage.allocation);
+            // vkDestroyImage(device, drawImage.image, nullptr);
+        });
     }
 
     void destroySwapchain(){
@@ -313,6 +342,101 @@ private:
             VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].renderSemaphore));
         }
         
+    }
+
+    void draw_background(VkCommandBuffer command){
+        // VkClearColorValue clearValue;
+        // float flash = std::abs(std::sin(frameNumber/120.f));
+        // clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+        // VkImageSubresourceRange clearRange = Initializers::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // vkCmdClearColorImage(command, drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, gradientPipeline);
+        vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, gradientPipelineLayout, 0, 1, &drawImageDescriptors, 0, nullptr);
+
+        vkCmdDispatch(command, std::ceil(drawExtent.width/16.0), std::ceil(drawExtent.height/16.0), 1);
+    }
+
+    void setupDescriptors(){
+        std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}
+        };
+
+        globalDescriptorAllocator.initPool(device, 10, sizes);
+
+        {
+            DescriptorLayoutBuilder builder;
+            builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            drawImageDescriptorLayout = builder.build(device, VK_SHADER_STAGE_COMPUTE_BIT);
+        }
+
+        drawImageDescriptors = globalDescriptorAllocator.allocate(device, drawImageDescriptorLayout);
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageView = drawImage.imageView;
+
+        VkWriteDescriptorSet drawImageInfo{};
+        drawImageInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        drawImageInfo.pNext = nullptr;
+
+        drawImageInfo.dstBinding = 0;
+        drawImageInfo.dstSet = drawImageDescriptors;
+        drawImageInfo.descriptorCount = 1;
+        drawImageInfo.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        drawImageInfo.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(device, 1, &drawImageInfo, 0, nullptr);
+        
+        mainDeletionQueue.pushFunction([&](){
+            globalDescriptorAllocator.destroyPool(device);
+            vkDestroyDescriptorSetLayout(device, drawImageDescriptorLayout, nullptr);
+        });
+
+    }
+
+    void setupPipeline(){
+        setupBackgroundPipeline();
+    }
+
+    void setupBackgroundPipeline(){
+        VkPipelineLayoutCreateInfo computeLayout{};
+        computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        computeLayout.pNext = nullptr;
+        computeLayout.pSetLayouts = &drawImageDescriptorLayout;
+        computeLayout.setLayoutCount = 1;
+
+        VK_CHECK(vkCreatePipelineLayout(device, &computeLayout, nullptr, &gradientPipelineLayout));
+
+        VkShaderModule computeDrawShader;
+        if(!Utility::loadShaderModule("shaders\\gradient.comp.spv", device, &computeDrawShader)){
+            fmt::print("Failed to load compute Shader!");
+        }
+
+        VkPipelineShaderStageCreateInfo stageInfo{};
+        stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stageInfo.pNext = nullptr;
+
+        stageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stageInfo.module = computeDrawShader;
+        stageInfo.pName = "main";
+
+        VkComputePipelineCreateInfo computePipelineCreateInfo{};
+        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        computePipelineCreateInfo.pNext = nullptr;
+        computePipelineCreateInfo.layout = gradientPipelineLayout;
+        computePipelineCreateInfo.stage = stageInfo;
+
+        VK_CHECK(vkCreateComputePipelines(device,VK_NULL_HANDLE,1,&computePipelineCreateInfo, nullptr, &gradientPipeline));
+
+        vkDestroyShaderModule(device, computeDrawShader, nullptr);
+
+        mainDeletionQueue.pushFunction([&]() {
+            vkDestroyPipelineLayout(device, gradientPipelineLayout, nullptr);
+            vkDestroyPipeline(device, gradientPipeline, nullptr);
+        });
     }
 
     void cleanupWindow(){

@@ -22,6 +22,10 @@
 #include <vector>   // Using vectors in places including swapchain images and views
 #include <deque>
 #include <functional>
+#include <span>
+
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 
 const uint32_t WIDTH = 800, HEIGHT = 600;
 
