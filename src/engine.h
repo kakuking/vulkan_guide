@@ -52,6 +52,11 @@ public:
     VkPipelineLayout trianglePipelineLayout;
     VkPipeline trianglePipeline;
 
+    VkPipelineLayout meshPipelineLayout;
+    VkPipeline meshPipeline;
+
+    GPUMeshBuffers rectangle;
+
     std::vector<ComputeEffect> backgroundEffects;
     int currentBackgroundEffect{0};
 
@@ -65,6 +70,7 @@ public:
         setupSyncStructures();
         setupDescriptors();
         setupPipeline();
+        setupDefaultRectangleData();
         setupImgui();
     }
 
@@ -534,7 +540,8 @@ private:
 
     void setupPipeline(){
         setupBackgroundPipeline();
-        setupTrianglePipeline();
+        // setupTrianglePipeline();
+        setupMeshPipeline();
     }
 
     void setupBackgroundPipeline(){
@@ -618,7 +625,7 @@ private:
         VkRenderingInfo renderInfo = Initializers::renderingInfo(drawExtent, &colorAttachment, nullptr);
         vkCmdBeginRendering(command, &renderInfo);
 
-        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+        // vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
         
         VkViewport viewport{};
         viewport.x = 0;
@@ -638,7 +645,19 @@ private:
 
         vkCmdSetScissor(command, 0, 1, &scissor);
 
-        vkCmdDraw(command, 3, 1, 0, 0);
+        // vkCmdDraw(command, 3, 1, 0, 0);
+
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);
+
+        GPUDrawPushConstants pushConstants;
+        pushConstants.worldMatrix = glm::mat4(1.f);
+        pushConstants.vertexBuffer = rectangle.vertexBufferAddress;
+
+        vkCmdPushConstants(command, meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+        vkCmdBindIndexBuffer(command, rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        
+        // HARDCODED TO DRAW 6 VERTICES
+        vkCmdDrawIndexed(command, 6, 1, 0, 0, 0);
 
         vkCmdEndRendering(command);
     }
@@ -679,6 +698,152 @@ private:
         mainDeletionQueue.pushFunction([&](){
             vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
             vkDestroyPipeline(device, trianglePipeline, nullptr);
+        });
+    }
+
+    void setupMeshPipeline(){
+        VkShaderModule triangleVertShader;
+        if(!Utility::loadShaderModule("shaders\\shader.vert.spv", device, &triangleVertShader)){
+            fmt::println("Failed to load vertex shader");
+        }
+
+        VkShaderModule triangleFragShader;
+        if(!Utility::loadShaderModule("shaders\\shader.frag.spv", device, &triangleFragShader)){
+            fmt::println("Failed to load frag shader");
+        }
+
+        VkPushConstantRange bufferRange{};
+        bufferRange.offset = 0;
+        bufferRange.size = sizeof(GPUDrawPushConstants);
+        bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkPipelineLayoutCreateInfo layoutInfo = Initializers::pipelineLayoutCreateInfo();
+        layoutInfo.pPushConstantRanges = &bufferRange;
+        layoutInfo.pushConstantRangeCount = 1;
+
+        VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &meshPipelineLayout));
+
+        PipelineBuilder pipelineBuilder;
+        pipelineBuilder.pipelineLayout = meshPipelineLayout;
+        pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
+        pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        pipelineBuilder.setMultisamplingNone();
+        pipelineBuilder.disableBlending();
+        pipelineBuilder.disableDepthtest();
+
+        pipelineBuilder.setColorAttachmentFormat(drawImage.imageFormat);
+        pipelineBuilder.setDepthFormat(VK_FORMAT_UNDEFINED);
+
+        meshPipeline = pipelineBuilder.buildPipeline(device);
+
+        vkDestroyShaderModule(device, triangleFragShader, nullptr);
+        vkDestroyShaderModule(device, triangleVertShader, nullptr);
+
+        mainDeletionQueue.pushFunction([&](){
+            vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
+            vkDestroyPipeline(device, meshPipeline, nullptr);
+        });
+    }
+
+    GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices){
+        const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+        const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
+
+        GPUMeshBuffers newSurface;
+
+        newSurface.vertexBuffer = createBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+        VkBufferDeviceAddressInfo deviceAddressInfo{};
+        deviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        deviceAddressInfo.buffer = newSurface.vertexBuffer.buffer;
+        
+        newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(device, &deviceAddressInfo);
+
+        newSurface.indexBuffer = createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+        AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+        void* data = staging.allocation->GetMappedData();
+
+        memcpy(data, vertices.data(), vertexBufferSize);
+
+        memcpy((char*)data+vertexBufferSize, indices.data(), indexBufferSize);
+
+        immediateSubmit([&](VkCommandBuffer command) {
+            VkBufferCopy vertexCopy{0};
+            vertexCopy.dstOffset = 0;
+            vertexCopy.srcOffset = 0;
+            vertexCopy.size = vertexBufferSize;
+
+            vkCmdCopyBuffer(command, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+
+            VkBufferCopy indexCopy{0};
+            indexCopy.dstOffset = 0;
+            indexCopy.srcOffset = vertexBufferSize;
+            indexCopy.size = indexBufferSize;
+
+            vkCmdCopyBuffer(command, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+        });
+
+        destroyBuffer(staging);
+
+        return newSurface;
+    }
+
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage){
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.pNext = nullptr;
+        bufferInfo.size = allocSize;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        bufferInfo.usage = usage;
+
+        VmaAllocationCreateInfo vmaAllocInfo{};
+        vmaAllocInfo.usage =  memoryUsage;
+        vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        AllocatedBuffer newBuffer;
+
+        VK_CHECK(vmaCreateBuffer(allocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+
+        return newBuffer;
+    }
+
+    void destroyBuffer(const AllocatedBuffer& buffer){
+        vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
+    }
+
+    void setupDefaultRectangleData(){
+        std::array<Vertex,4> rect_vertices;
+
+        rect_vertices[0].position = {0.5,-0.5, 0};
+        rect_vertices[1].position = {0.5,0.5, 0};
+        rect_vertices[2].position = {-0.5,-0.5, 0};
+        rect_vertices[3].position = {-0.5,0.5, 0};
+
+        rect_vertices[0].color = {0,0, 0,1};
+        rect_vertices[1].color = { 0.5,0.5,0.5 ,1};
+        rect_vertices[2].color = { 1,0, 0,1 };
+        rect_vertices[3].color = { 0,1, 0,1 };
+
+        std::array<uint32_t,6> rect_indices;
+
+        rect_indices[0] = 0;
+        rect_indices[1] = 1;
+        rect_indices[2] = 2;
+
+        rect_indices[3] = 2;
+        rect_indices[4] = 1;
+        rect_indices[5] = 3;
+
+        rectangle = uploadMesh(rect_indices,rect_vertices);
+
+        //delete the rectangle data on engine shutdown
+        mainDeletionQueue.pushFunction([&](){
+            destroyBuffer(rectangle.indexBuffer);
+            destroyBuffer(rectangle.vertexBuffer);
         });
     }
 

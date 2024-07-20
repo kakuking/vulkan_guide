@@ -27,7 +27,7 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
-const uint32_t WIDTH = 1700, HEIGHT = 900;
+const uint32_t WIDTH = 800, HEIGHT = 600;
 
 const bool USE_VALIDATION_LAYERS = true;
 
