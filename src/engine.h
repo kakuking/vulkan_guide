@@ -49,6 +49,9 @@ public:
     VkCommandBuffer immediateCommandBuffer;
     VkCommandPool immediateCommandPool;
 
+    VkPipelineLayout trianglePipelineLayout;
+    VkPipeline trianglePipeline;
+
     std::vector<ComputeEffect> backgroundEffects;
     int currentBackgroundEffect{0};
 
@@ -186,10 +189,14 @@ private:
         Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
         // Draw to drawImage.image
-        draw_background(command);
+        drawBackground(command);
+
+        Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        drawGeometry(command);
 
         // Transition drawImage to src optimal and swapchain to dst optimal
-        Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         Utility::transitionImage(command, swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
         // Copies drawImage to swapchainImage
@@ -414,7 +421,7 @@ private:
         });
     }
 
-    void draw_background(VkCommandBuffer command){
+    void drawBackground(VkCommandBuffer command){
         ComputeEffect& effect = backgroundEffects[currentBackgroundEffect];
 
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
@@ -527,6 +534,7 @@ private:
 
     void setupPipeline(){
         setupBackgroundPipeline();
+        setupTrianglePipeline();
     }
 
     void setupBackgroundPipeline(){
@@ -601,6 +609,76 @@ private:
             {
                 vkDestroyPipeline(device, backgroundEffects[i].pipeline, nullptr);
             }            
+        });
+    }
+
+    void drawGeometry(VkCommandBuffer command){
+        VkRenderingAttachmentInfo colorAttachment = Initializers::attachmentInfo(drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        VkRenderingInfo renderInfo = Initializers::renderingInfo(drawExtent, &colorAttachment, nullptr);
+        vkCmdBeginRendering(command, &renderInfo);
+
+        vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+        
+        VkViewport viewport{};
+        viewport.x = 0;
+        viewport.y = 0;
+        viewport.width = drawExtent.width;
+        viewport.height = drawExtent.height;
+        viewport.minDepth = 0.f;
+        viewport.maxDepth = 1.f;
+
+        vkCmdSetViewport(command, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset.x = 0;
+        scissor.offset.y = 0;
+        scissor.extent.width = drawExtent.width;
+        scissor.extent.height = drawExtent.height;
+
+        vkCmdSetScissor(command, 0, 1, &scissor);
+
+        vkCmdDraw(command, 3, 1, 0, 0);
+
+        vkCmdEndRendering(command);
+    }
+
+    void setupTrianglePipeline(){
+        VkShaderModule triangleVertShader;
+        if(!Utility::loadShaderModule("shaders\\shader.vert.spv", device, &triangleVertShader)){
+            fmt::println("Failed to load vertex shader");
+        }
+
+        VkShaderModule triangleFragShader;
+        if(!Utility::loadShaderModule("shaders\\shader.frag.spv", device, &triangleFragShader)){
+            fmt::println("Failed to load frag shader");
+        }
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = Initializers::pipelineLayoutCreateInfo();
+
+        VK_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &trianglePipelineLayout));
+
+        PipelineBuilder pipelineBuilder;
+        pipelineBuilder.pipelineLayout = trianglePipelineLayout;
+        pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
+        pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        pipelineBuilder.setMultisamplingNone();
+        pipelineBuilder.disableBlending();
+        pipelineBuilder.disableDepthtest();
+
+        pipelineBuilder.setColorAttachmentFormat(drawImage.imageFormat);
+        pipelineBuilder.setDepthFormat(VK_FORMAT_UNDEFINED);
+
+        trianglePipeline = pipelineBuilder.buildPipeline(device);
+
+        vkDestroyShaderModule(device, triangleFragShader, nullptr);
+        vkDestroyShaderModule(device, triangleVertShader, nullptr);
+
+        mainDeletionQueue.pushFunction([&](){
+            vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
+            vkDestroyPipeline(device, trianglePipeline, nullptr);
         });
     }
 
