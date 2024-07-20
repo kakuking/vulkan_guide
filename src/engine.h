@@ -21,6 +21,9 @@ public:
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
 
+    bool resizeRequested = false;
+    VkExtent2D windowExtent;
+
     FrameData frames[FRAME_OVERLAP];
     uint32_t frameNumber;
     VkQueue graphicsQueue;
@@ -32,9 +35,12 @@ public:
     VkFormat swapchainImageFormat;
 
     AllocatedImage drawImage;
+    AllocatedImage depthImage;
+
     VkExtent2D drawExtent;
 
     DeletionQueue mainDeletionQueue;
+    DeletionQueue descriptorDeletionQueue;
     VmaAllocator allocator;
 
     DescriptorAllocator globalDescriptorAllocator;
@@ -83,6 +89,10 @@ public:
             auto frameStartTime = std::chrono::high_resolution_clock::now();
 
             glfwPollEvents();
+
+            if(resizeRequested){
+                resizeSwapchain();
+            }
 
             ImGui_ImplGlfw_NewFrame();
             ImGui_ImplVulkan_NewFrame();
@@ -156,6 +166,7 @@ public:
         }
         
         mainDeletionQueue.flush();
+        descriptorDeletionQueue.flush();
 
         destroySwapchain();
 
@@ -178,7 +189,10 @@ private:
         VK_CHECK(vkResetFences(device, 1, &getCurrentFrame().renderFence));
 
         uint32_t swapchainImageIndex;
-        VK_CHECK(vkAcquireNextImageKHR(device, swapchain, 1000000000, getCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex));
+        if(vkAcquireNextImageKHR(device, swapchain, 1000000000, getCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex) == VK_ERROR_OUT_OF_DATE_KHR){
+            resizeRequested = true;
+            return;
+        }
 
         VkCommandBuffer command = getCurrentFrame().mainCommandBuffer;
 
@@ -198,6 +212,7 @@ private:
         drawBackground(command);
 
         Utility::transitionImage(command, drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        Utility::transitionImage(command, depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
         drawGeometry(command);
 
@@ -235,7 +250,9 @@ private:
         presentInfo.pWaitSemaphores = &getCurrentFrame().renderSemaphore;
 
         presentInfo.pImageIndices = &swapchainImageIndex;
-        VK_CHECK(vkQueuePresentKHR(graphicsQueue, &presentInfo));
+        if(vkQueuePresentKHR(graphicsQueue, &presentInfo) == VK_ERROR_OUT_OF_DATE_KHR){
+            resizeRequested = true;
+        }
 
         frameNumber++;
     }
@@ -247,6 +264,13 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Zombifier", nullptr, nullptr);
+        glfwSetWindowUserPointer(window, this);
+        glfwSetFramebufferSizeCallback(window, resizedWindow);
+    }
+
+    static void resizedWindow(GLFWwindow* window, int width, int height){
+        auto app = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+        app->resizeRequested = true;
     }
 
     void setupVulkan(){
@@ -321,22 +345,7 @@ private:
     }
 
     void setupSwapchain(){
-        vkb::SwapchainBuilder builder{physicalDevice, device, surface};
-
-        swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-
-        vkb::Swapchain vkb_swapchain = builder
-                                        .set_desired_format(VkSurfaceFormatKHR{.format = swapchainImageFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-                                        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-                                        .set_desired_extent(WIDTH, HEIGHT)
-                                        .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                                        .build()
-                                        .value();
-        
-        swapchainExtent = vkb_swapchain.extent;
-        swapchain = vkb_swapchain.swapchain;
-        swapchainImages = vkb_swapchain.get_images().value();
-        swapchainImageViews = vkb_swapchain.get_image_views().value();
+        createSwapchain(WIDTH, HEIGHT);
 
         VkExtent3D drawImageExtent = {
             swapchainExtent.width,
@@ -364,11 +373,46 @@ private:
 
         VK_CHECK(vkCreateImageView(device, &rviewInfo, nullptr, &drawImage.imageView));
 
+        depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
+        depthImage.imageExtent = drawImageExtent;
+
+        VkImageUsageFlags depthImageUsages{};
+        depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        VkImageCreateInfo dImageInfo = Initializers::imageCreateInfo(depthImage.imageFormat, depthImageUsages, drawImageExtent);
+
+        vmaCreateImage(allocator, &dImageInfo, &rimageAllocInfo, &depthImage.image, &depthImage.allocation, nullptr); 
+
+        VkImageViewCreateInfo dviewInfo = Initializers::imageViewCreateInfo(depthImage.imageFormat, depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+        VK_CHECK(vkCreateImageView(device, &dviewInfo, nullptr, &depthImage.imageView));
+
         mainDeletionQueue.pushFunction([=](){
             vkDestroyImageView(device, drawImage.imageView, nullptr);
             vmaDestroyImage(allocator, drawImage.image, drawImage.allocation);
-            // vkDestroyImage(device, drawImage.image, nullptr);
+
+            vkDestroyImageView(device, depthImage.imageView, nullptr);
+            vmaDestroyImage(allocator, depthImage.image, depthImage.allocation);
         });
+    }
+
+    void createSwapchain(int width, int height){
+        vkb::SwapchainBuilder builder{physicalDevice, device, surface};
+
+        swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+
+        vkb::Swapchain vkb_swapchain = builder
+                                        .set_desired_format(VkSurfaceFormatKHR{.format = swapchainImageFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
+                                        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+                                        .set_desired_extent(width, height)
+                                        .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                                        .build()
+                                        .value();
+        
+        swapchainExtent = vkb_swapchain.extent;
+        swapchain = vkb_swapchain.swapchain;
+        swapchainImages = vkb_swapchain.get_images().value();
+        swapchainImageViews = vkb_swapchain.get_image_views().value();
     }
 
     void destroySwapchain(){
@@ -378,6 +422,25 @@ private:
         {
             vkDestroyImageView(device, swapchainImageViews[i], nullptr);
         }
+        
+    }
+
+    void resizeSwapchain(){
+        vkDeviceWaitIdle(device);
+
+        destroySwapchain();
+        descriptorDeletionQueue.flush();
+
+        int width, height;
+        glfwGetWindowSize(window, &width, &height);
+        
+        windowExtent.width = width;
+        windowExtent.height = height;
+
+        createSwapchain(windowExtent.width, windowExtent.height);
+        setupDescriptors();
+
+        resizeRequested = false;
         
     }
 
@@ -468,7 +531,7 @@ private:
 
         vkUpdateDescriptorSets(device, 1, &drawImageInfo, 0, nullptr);
         
-        mainDeletionQueue.pushFunction([&](){
+        descriptorDeletionQueue.pushFunction([&](){
             globalDescriptorAllocator.destroyPool(device);
             vkDestroyDescriptorSetLayout(device, drawImageDescriptorLayout, nullptr);
         });
@@ -621,8 +684,10 @@ private:
 
     void drawGeometry(VkCommandBuffer command){
         VkRenderingAttachmentInfo colorAttachment = Initializers::attachmentInfo(drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        VkRenderingAttachmentInfo depthAttachment = Initializers::depthAttachmentInfo(depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-        VkRenderingInfo renderInfo = Initializers::renderingInfo(drawExtent, &colorAttachment, nullptr);
+
+        VkRenderingInfo renderInfo = Initializers::renderingInfo(drawExtent, &colorAttachment, &depthAttachment);
         vkCmdBeginRendering(command, &renderInfo);
 
         // vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
@@ -681,7 +746,8 @@ private:
         pipelineBuilder.pipelineLayout = trianglePipelineLayout;
         pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
         pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        // pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_LINE);
         pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         pipelineBuilder.setMultisamplingNone();
         pipelineBuilder.disableBlending();
@@ -728,13 +794,14 @@ private:
         pipelineBuilder.setShaders(triangleVertShader, triangleFragShader);
         pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        // pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_LINE);
         pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         pipelineBuilder.setMultisamplingNone();
-        pipelineBuilder.disableBlending();
-        pipelineBuilder.disableDepthtest();
+        pipelineBuilder.enableBlendingAlphablend();
+        pipelineBuilder.enableDepthtest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
 
         pipelineBuilder.setColorAttachmentFormat(drawImage.imageFormat);
-        pipelineBuilder.setDepthFormat(VK_FORMAT_UNDEFINED);
+        pipelineBuilder.setDepthFormat(depthImage.imageFormat);
 
         meshPipeline = pipelineBuilder.buildPipeline(device);
 

@@ -162,6 +162,20 @@ namespace Initializers{
         return colorAttachment;
     }
 
+    VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view, VkImageLayout layout){
+        VkRenderingAttachmentInfo depthAttachment {};
+        depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthAttachment.pNext = nullptr;
+
+        depthAttachment.imageView = view;
+        depthAttachment.imageLayout = layout;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.clearValue.depthStencil.depth = 1.f;
+
+        return depthAttachment;
+    }
+
     VkRenderingInfo renderingInfo(VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment, VkRenderingAttachmentInfo* depthAttachment)
     {
         VkRenderingInfo renderInfo {};
